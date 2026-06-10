@@ -163,6 +163,7 @@ class Orchestrator:
             conversations_dir=conversations_dir,
             insights_dir=insights_dir,
             history_window=agent_cfg.get("history_window", 20),
+            sms_reader=self.sms_reader,
         )
         self.safety = SafetyLayer(
             blocked_keywords=safety_cfg.get("blocked_keywords", []),

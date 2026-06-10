@@ -142,17 +142,41 @@ class ReasoningEngine:
             round_outputs=round_outputs,
         )
 
+    @staticmethod
+    def _format_thread(thread: List[dict], contact_name: str, agent_name: str) -> str:
+        """
+        Format a conversation_thread list into a readable chat log for the LLM.
+
+        Example output:
+          [2025-06-10 09:00]  Amina : Hey are you coming today?
+          [2025-06-10 09:15]  You   : Yeah I'll be there by 2
+          [2025-06-10 09:16]  Amina : ok cool
+          [2025-06-10 14:22]  Amina : [NEW] Actually can you bring the laptop?
+        """
+        lines = []
+        for entry in thread:
+            ts = entry.get("timestamp", "")[:16].replace("T", " ")
+            direction = entry.get("direction", "inbound")
+            is_new = entry.get("is_new", False)
+            speaker = agent_name if direction == "outbound" else contact_name
+            body = entry.get("body", "").replace("\n", " ")
+            tag = "[NEW] " if is_new else ""
+            lines.append(f"  [{ts}]  {speaker:<10}: {tag}{body}")
+        return "\n".join(lines) if lines else "  (no prior messages)"
+
     def _round1(self, context: Dict, contact) -> dict:
         contact_info = context["contact"]
-        incoming = context["incoming_messages"]
-        history = context.get("recent_history", [])
+        incoming = context["new_messages"]
+        thread = context.get("conversation_thread", [])
         insights = context.get("insights")
 
+        chat_log = self._format_thread(thread, contact_info["name"], self.agent_name)
+
         user_content = (
-            f"Contact profile: {json.dumps(contact_info)}\n"
-            f"Recent conversation history: {json.dumps(history[-10:])}\n"
-            f"Current insights: {json.dumps(insights)}\n"
-            f"Incoming message(s): {json.dumps(incoming)}\n\n"
+            f"Contact profile: {json.dumps(contact_info)}\n\n"
+            f"Conversation thread (chronological — [NEW] = just received, needs reply):\n"
+            f"{chat_log}\n\n"
+            f"Current insights: {json.dumps(insights)}\n\n"
             "Return a JSON object with these exact keys:\n"
             "- intent: question|update|casual_chat|complaint|request|follow_up|greeting|unknown\n"
             "- emotional_tone: happy|sad|stressed|playful|urgent|neutral|affectionate\n"
@@ -185,14 +209,14 @@ class ReasoningEngine:
 
     def _round2(self, context: Dict, contact, r1: dict) -> str:
         contact_info = context["contact"]
-        incoming = context["incoming_messages"]
-        history = context.get("recent_history", [])
+        thread = context.get("conversation_thread", [])
 
         system = ROUND2_SYSTEM_TEMPLATE.format(
             agent_name=self.agent_name,
             contact_name=contact_info["name"],
             language=contact_info["language"],
         )
+        chat_log = self._format_thread(thread, contact_info["name"], self.agent_name)
         relationship_ctx = (
             f"Relationship context:\n"
             f"  - How you know them: {contact_info['how_we_met']}\n"
@@ -207,9 +231,9 @@ class ReasoningEngine:
         )
         user_content = (
             f"{relationship_ctx}\n\n"
-            f"Round 1 analysis: {json.dumps(r1)}\n"
-            f"Their message(s): {json.dumps(incoming)}\n"
-            f"Conversation history: {json.dumps(history[-10:])}\n\n"
+            f"Conversation thread (chronological — [NEW] messages are what you are replying to):\n"
+            f"{chat_log}\n\n"
+            f"Round 1 analysis: {json.dumps(r1)}\n\n"
             "Write the reply now."
         )
         messages = [
@@ -227,11 +251,13 @@ class ReasoningEngine:
 
     def _round3(self, context: Dict, contact, draft: str) -> dict:
         contact_info = context["contact"]
-        incoming = context["incoming_messages"]
+        thread = context.get("conversation_thread", [])
+        chat_log = self._format_thread(thread, contact_info["name"], self.agent_name)
 
         user_content = (
-            f"Contact: {contact_info['name']} ({contact_info['relationship']}, trust: {contact_info.get('trust_level', 'medium')})\n"
-            f"Their message: {json.dumps(incoming)}\n"
+            f"Contact: {contact_info['name']} ({contact_info['relationship']}, trust: {contact_info.get('trust_level', 'medium')})\n\n"
+            f"Conversation thread (chronological — [NEW] = messages being replied to):\n"
+            f"{chat_log}\n\n"
             f"Proposed reply: {draft}\n\n"
             "Review criteria:\n"
             "1. Does the reply sound like a real person, not an AI?\n"

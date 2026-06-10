@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("sms_reader")
 
@@ -74,6 +74,66 @@ class SMSReader:
         except Exception as e:
             logger.warning(f"SMS read error: {e}")
             return []
+
+    def read_thread(self, phone: str, limit_each: int = 20) -> List[Dict]:
+        """
+        Fetch the full conversation thread for a contact by reading both
+        inbox (received) and sent messages from the device SMS database,
+        then merging and sorting them chronologically.
+
+        Returns a list of dicts: {direction, body, timestamp, message_id}
+        Falls back to an empty list if termux-sms-list is unavailable.
+        """
+        received = self._raw_fetch("inbox", phone, limit_each)
+        sent     = self._raw_fetch("sent",  phone, limit_each)
+
+        thread: List[Dict] = []
+        for m in received:
+            thread.append({
+                "direction":  "inbound",
+                "body":       m.get("body", ""),
+                "timestamp":  self._ts(m),
+                "message_id": str(m.get("_id", "")),
+            })
+        for m in sent:
+            thread.append({
+                "direction":  "outbound",
+                "body":       m.get("body", ""),
+                "timestamp":  self._ts(m),
+                "message_id": str(m.get("_id", "")),
+            })
+
+        thread.sort(key=lambda e: e["timestamp"])
+        return thread
+
+    def _raw_fetch(self, msg_type: str, address: str, limit: int) -> List[dict]:
+        """Run termux-sms-list for a given type and address, return raw dicts."""
+        try:
+            result = subprocess.run(
+                [
+                    "termux-sms-list",
+                    "-t", msg_type,
+                    "-f", address,
+                    "-l", str(limit),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return []
+            data = json.loads(result.stdout.strip())
+            return [m for m in data if m.get("_id") is not None and m.get("body") is not None]
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+            return []
+        except Exception as e:
+            logger.warning(f"_raw_fetch({msg_type}, {address}): {e}")
+            return []
+
+    @staticmethod
+    def _ts(m: dict) -> str:
+        ts_ms = m.get("date", 0) or 0
+        return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
 
     def _valid(self, m: dict) -> bool:
         return bool(m.get("_id")) and bool(m.get("address")) and m.get("body") is not None
