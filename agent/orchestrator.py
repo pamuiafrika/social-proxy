@@ -32,7 +32,73 @@ def _in_active_hours(window: str) -> bool:
 class Orchestrator:
     def __init__(self, config: dict):
         self.config = config
+        self._config_path = self._resolve_config_path(config)
         self._build_components()
+
+    @staticmethod
+    def _resolve_config_path(config: dict) -> str:
+        import os
+        base = os.path.expanduser(config.get("_base_dir", "~/social-proxy"))
+        return os.path.join(base, "config.yaml")
+
+    def _reload_config(self):
+        """Re-read config.yaml from disk so runtime changes are picked up immediately."""
+        import os, yaml
+        if not os.path.exists(self._config_path):
+            logger.warning(f"config.yaml not found at {self._config_path} — keeping previous config")
+            return
+        try:
+            with open(self._config_path, encoding="utf-8") as f:
+                fresh = yaml.safe_load(f) or {}
+            fresh["_base_dir"] = self.config["_base_dir"]
+            ds_key = os.environ.get("DEEPSEEK_API_KEY", "")
+            zh_key = os.environ.get("ZHIPU_API_KEY", "")
+            fresh.setdefault("ai", {})
+            if ds_key:
+                fresh["ai"]["deepseek_api_key"] = ds_key
+            if zh_key:
+                fresh["ai"]["zhipu_api_key"] = zh_key
+            self.config = fresh
+            self._apply_config()
+        except Exception as e:
+            logger.warning(f"Config reload failed — keeping previous config: {e}")
+
+    def _apply_config(self):
+        """Push current config values into already-instantiated components."""
+        safety_cfg  = self.config.get("safety", {})
+        pacing_cfg  = self.config.get("pacing", {})
+        sms_cfg     = self.config.get("sms", {})
+        agent_cfg   = self.config.get("agent", {})
+        thread_cfg  = self.config.get("thread_batcher", {})
+        sched_cfg   = self.config.get("schedule", {})
+
+        # Safety
+        self.safety.blocked_keywords             = [k.lower() for k in safety_cfg.get("blocked_keywords", [])]
+        self.safety.self_silence_topics          = [t.lower() for t in safety_cfg.get("self_silence_topics", [])]
+        self.safety.max_per_contact_per_hour     = safety_cfg.get("max_replies_per_contact_per_hour", 5)
+        self.safety.max_per_day                  = safety_cfg.get("max_replies_per_day", 100)
+        self.safety.flood_window                 = safety_cfg.get("flood_window_minutes", 60)
+        self.safety.trust_gate_enabled           = safety_cfg.get("trust_gate_enabled", True)
+
+        # Pacing
+        self.pacer.min_seconds    = pacing_cfg.get("min_seconds", 30)
+        self.pacer.max_seconds    = pacing_cfg.get("max_seconds", 300)
+        self.pacer.high_trust_min = pacing_cfg.get("high_trust_min", 15)
+        self.pacer.high_trust_max = pacing_cfg.get("high_trust_max", 90)
+        self.pacer.low_trust_min  = pacing_cfg.get("low_trust_min", 60)
+        self.pacer.low_trust_max  = pacing_cfg.get("low_trust_max", 600)
+
+        # Schedule + misc
+        self.active_hours       = sched_cfg.get("active_hours", "00:00-23:59")
+        self.interval_minutes   = sched_cfg.get("interval_minutes", 5)
+        self.sms_reader.inbox_limit = sms_cfg.get("inbox_limit", 50)
+
+        # Agent
+        self.dry_run                   = agent_cfg.get("dry_run", False)
+        self.reasoner.max_rounds       = agent_cfg.get("max_rounds", 3)
+        self.reasoner.agent_name       = agent_cfg.get("name", "Agent")
+        self.enrichment.enabled        = agent_cfg.get("enrichment_enabled", True)
+        self.thread_batcher.window_seconds = thread_cfg.get("window_seconds", 1800)
 
     def _build_components(self):
         import os
@@ -151,6 +217,8 @@ class Orchestrator:
         )
 
     def run_once(self, dry_run: Optional[bool] = None):
+        self._reload_config()
+
         if dry_run is not None:
             self.dry_run = dry_run
             self.pacer.dry_run = dry_run
