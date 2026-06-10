@@ -1,0 +1,5 @@
+phone,name,relationship,how_we_met,shared_interests,communication_style,language,trust_level,dnd_after,dnd_before,sim_preference,model_preference,notes,active
++255712345678,Amina,close_friend,university,"music,coding,travel",casual_swahili_mix,sw+en,high,23:00,07:00,same,auto,"Short replies. Hates over-explanation.",true
++255787654321,Mr Hassan,work_colleague,job,"tech,business",formal_english,en,medium,20:00,08:00,sim1,deepseek,"Always formal. Full sentences only.",true
++255799999999,Mama,family,born,"life,faith,food",warm_swahili,sw,high,23:00,06:00,same,auto,"Use Mama. Warm tone. Not too short.",true
++255700000001,Baraka,acquaintance,neighborhood,football,casual_swahili,sw,low,22:00,08:00,default,zhipu,"Only answer direct questions.",true

@@ -1,0 +1,86 @@
+# ─── Agent ─────────────────────────────────────────────
+agent:
+  name: "Jabali"                    # Your name — used in reply prompts
+  max_rounds: 3                     # Reasoning rounds (1–3)
+  history_window: 20                # Recent messages loaded per contact
+  dry_run: false                    # If true, print reply but don't send
+  max_retry_attempts: 3             # Queue retry limit before mark_failed
+  enrichment_enabled: true          # Update contacts.csv from insights
+
+# ─── Schedule ──────────────────────────────────────────
+schedule:
+  interval_minutes: 5               # Cron / daemon polling interval
+  active_hours: "07:00-23:00"       # Only run during these hours
+  timezone: "Africa/Dar_es_Salaam"  # Device timezone for active_hours
+
+# ─── SIM ───────────────────────────────────────────────
+sim:
+  strategy: "same"                  # sim1 | sim2 | same | default
+
+# ─── SMS ───────────────────────────────────────────────
+sms:
+  inbox_limit: 50                   # Max messages to fetch per run
+  default_country_code: "+255"      # For normalising local numbers
+  max_reply_length: 320             # Warn if reply exceeds this (chars)
+
+# ─── Safety ────────────────────────────────────────────
+safety:
+  blocked_keywords:
+    - "send money"
+    - "m-pesa pin"
+    - "otp"
+    - "password"
+    - "pin number"
+    - "lipa"
+    - "transfer kwa"
+  self_silence_topics:
+    - "politics"
+    - "health_advice"
+    - "legal_advice"
+    - "financial_advice"
+    - "religion_debate"
+  max_replies_per_contact_per_hour: 5
+  max_replies_per_day: 100
+  flood_window_minutes: 60
+  trust_gate_enabled: true
+
+# ─── Pacing ────────────────────────────────────────────
+pacing:
+  min_seconds: 30
+  max_seconds: 300
+  high_trust_min: 15
+  high_trust_max: 90
+  low_trust_min: 60
+  low_trust_max: 600
+
+# ─── Dedup ─────────────────────────────────────────────
+dedup:
+  cooldown_seconds: 120
+  retention_days: 90
+
+# ─── Thread Batcher ────────────────────────────────────
+thread_batcher:
+  window_seconds: 1800              # 30 minutes
+
+# ─── AI / LLM ──────────────────────────────────────────
+ai:
+  deepseek_api_key: ""              # Set via env var DEEPSEEK_API_KEY
+  zhipu_api_key: ""                 # Set via env var ZHIPU_API_KEY
+  deepseek_model: "deepseek-chat"
+  zhipu_model: "glm-4-flash"
+  health_check_ping: false
+  request_timeout_seconds: 30
+  round1_temperature: 0.2
+  round2_temperature: 0.75
+  round3_temperature: 0.2
+  max_tokens: 1000
+
+# ─── Digest ────────────────────────────────────────────
+digest:
+  auto_generate: false
+
+# ─── Logging ───────────────────────────────────────────
+logging:
+  level: "INFO"                     # DEBUG | INFO | WARNING | ERROR
+  max_bytes: 5242880                # 5 MB
+  backup_count: 3

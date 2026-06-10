@@ -1,0 +1,29 @@
+# Runtime data — never commit
+store/
+logs/
+
+# Sensitive files
+contacts.csv
+config.yaml
+*.env
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
