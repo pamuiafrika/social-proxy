@@ -66,7 +66,7 @@ class ContextBuilder:
 
         # Try live device thread first
         if self.sms_reader is not None:
-            live = self.sms_reader.read_thread(phone, limit_each=self.history_window)
+            live = self.sms_reader.read_thread(phone, limit_each=10)
             if live:
                 # Tag new messages so the LLM knows what just arrived
                 for entry in live:

@@ -75,7 +75,7 @@ class SMSReader:
             logger.warning(f"SMS read error: {e}")
             return []
 
-    def read_thread(self, phone: str, limit_each: int = 20) -> List[Dict]:
+    def read_thread(self, phone: str, limit_each: int = 10) -> List[Dict]:
         """
         Fetch the full conversation thread for a contact by reading both
         inbox (received) and sent messages from the device SMS database,
