@@ -57,18 +57,22 @@ class QueueManager:
             conn.executescript(schema)
 
     def is_duplicate(self, message_id: str, phone: str, body: str, received_at: str) -> bool:
-        date_only = received_at[:10]
-        h = hashlib.sha256(f"{phone}|{body}|{date_only}".encode()).hexdigest()
+        # Layer 1: message_id already in queue (any status) — primary check
         with self._conn() as conn:
             row = conn.execute("SELECT 1 FROM jobs WHERE message_id = ?", (message_id,)).fetchone()
             if row:
                 return True
+            # Layer 2: hash fallback for SMS DB resets (uses full timestamp, not date-only,
+            # to avoid false positives when the same person sends the same text twice in a day)
+            h = self._make_hash(phone, body, received_at)
             row = conn.execute("SELECT 1 FROM dedup_hashes WHERE hash = ?", (h,)).fetchone()
             return bool(row)
 
+    def _make_hash(self, phone: str, body: str, received_at: str) -> str:
+        return hashlib.sha256(f"{phone}|{body}|{received_at}".encode()).hexdigest()
+
     def _store_dedup_hash(self, conn, phone: str, body: str, received_at: str):
-        date_only = received_at[:10]
-        h = hashlib.sha256(f"{phone}|{body}|{date_only}".encode()).hexdigest()
+        h = self._make_hash(phone, body, received_at)
         conn.execute(
             "INSERT OR IGNORE INTO dedup_hashes (hash, phone, created_at) VALUES (?, ?, ?)",
             (h, phone, _now()),
