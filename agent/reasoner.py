@@ -172,6 +172,14 @@ class ReasoningEngine:
 
         chat_log = self._format_thread(thread, contact_info["name"], self.agent_name)
 
+        logger.info(
+            f"[context:{contact_info['name']}] Conversation thread sent to AI "
+            f"({len(thread)} entries, "
+            f"{sum(1 for e in thread if not e.get('is_new'))} prior, "
+            f"{sum(1 for e in thread if e.get('is_new'))} new):\n"
+            f"{chat_log}"
+        )
+
         user_content = (
             f"Contact profile: {json.dumps(contact_info)}\n\n"
             f"Conversation thread (chronological — [NEW] = just received, needs reply):\n"
