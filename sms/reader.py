@@ -87,34 +87,50 @@ class SMSReader:
         received = self._raw_fetch("inbox", phone, limit_each)
         sent     = self._raw_fetch("sent",  phone, limit_each)
 
+        # Deduplicate by _id in case the same message appears in both queries
+        seen_ids: set = set()
         thread: List[Dict] = []
-        for m in received:
+
+        for m, default_dir in [(m, "inbound") for m in received] + [(m, "outbound") for m in sent]:
+            mid = str(m.get("_id", ""))
+            if mid in seen_ids:
+                continue
+            seen_ids.add(mid)
+            # Use `type` field from the DB as authoritative direction source:
+            # Android SMS type: 1=received(inbox), 2=sent, anything else treat as
+            # inbound for inbox queries and outbound for sent queries.
+            raw_type = m.get("type")
+            if raw_type == 2:
+                direction = "outbound"
+            elif raw_type == 1:
+                direction = "inbound"
+            else:
+                direction = default_dir
             thread.append({
-                "direction":  "inbound",
+                "direction":  direction,
                 "body":       m.get("body", ""),
                 "timestamp":  self._ts(m),
-                "message_id": str(m.get("_id", "")),
-            })
-        for m in sent:
-            thread.append({
-                "direction":  "outbound",
-                "body":       m.get("body", ""),
-                "timestamp":  self._ts(m),
-                "message_id": str(m.get("_id", "")),
+                "message_id": mid,
             })
 
         thread.sort(key=lambda e: e["timestamp"])
         return thread
 
     def _raw_fetch(self, msg_type: str, address: str, limit: int) -> List[dict]:
-        """Run termux-sms-list for a given type and address, return raw dicts."""
+        """Run termux-sms-list for a given type and address, return raw dicts.
+
+        Uses last-9-digit LIKE matching so +255, 0, and bare formats all hit.
+        """
+        # Strip non-digits and take the last 9 significant digits.
+        # +255612494740 → 612494740 — matches however Android stored the number.
+        digits = re.sub(r'\D', '', address)[-9:]
         try:
             result = subprocess.run(
                 [
                     "termux-sms-list",
                     "-t", msg_type,
-                    "-f", address,
                     "-l", str(limit),
+                    f"--message-selection=address LIKE '%{digits}%'",
                 ],
                 capture_output=True,
                 text=True,
@@ -132,7 +148,8 @@ class SMSReader:
 
     @staticmethod
     def _ts(m: dict) -> str:
-        ts_ms = m.get("date", 0) or 0
+        # Sent messages may populate date_sent instead of (or in addition to) date
+        ts_ms = m.get("date") or m.get("date_sent") or 0
         return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
 
     def _valid(self, m: dict) -> bool:

@@ -78,7 +78,7 @@ pkg install python sqlite termux-api cronie git
 
 ```bash
 cd ~
-git clone https://github.com/YOUR_USERNAME/social-proxy.git
+git clone https://github.com/pamuiafrika/social-proxy.git
 cd social-proxy
 pip install -r requirements.txt
 ```
