@@ -39,9 +39,17 @@ class SMSReader:
         self.default_country_code = default_country_code
 
     def read(self) -> List[InboundMessage]:
+        # -t inbox  : message type filter (type column = 1)
+        # -l <n>    : limit
+        # --message-selection="read = 0" : unread only (no -u flag exists)
         try:
             result = subprocess.run(
-                ["termux-sms-list", "-t", "inbox", "-l", str(self.inbox_limit), "-u"],
+                [
+                    "termux-sms-list",
+                    "-t", "inbox",
+                    "-l", str(self.inbox_limit),
+                    "--message-selection=read = 0",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=15,
