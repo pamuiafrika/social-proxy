@@ -221,6 +221,225 @@ def cmd_review_edit(base_dir: str, job_id: int, reply_text: str):
         fmt.error(f"Send failed for job #{job_id}.")
 
 
+def _prompt(label: str, default: str = "", hint: str = "", required: bool = False) -> str:
+    """Print a labelled prompt and return stripped input. Enter keeps `default`."""
+    hint_str = f"  ({hint})" if hint else ""
+    default_str = f"  [{default}]" if default else ""
+    while True:
+        try:
+            val = input(f"  {label}{default_str}{hint_str}: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            raise SystemExit(0)
+        if val == "" and default:
+            return default
+        if val == "" and required:
+            print(f"    ! Required — please enter a value.")
+            continue
+        return val
+
+
+def _prompt_choice(label: str, choices: list, default: str = "") -> str:
+    """Prompt that enforces one of the allowed choices."""
+    choices_str = "/".join(choices)
+    while True:
+        val = _prompt(label, default=default, hint=choices_str)
+        if val in choices:
+            return val
+        print(f"    ! Must be one of: {choices_str}")
+
+
+def _write_contacts_csv(contacts_path: str, rows: list, fieldnames: list):
+    import csv
+    with open(contacts_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+CONTACT_FIELDS = [
+    "phone", "name", "relationship", "how_we_met", "shared_interests",
+    "communication_style", "language", "trust_level", "dnd_after", "dnd_before",
+    "sim_preference", "model_preference", "notes", "active",
+]
+
+
+def _collect_contact_fields(current: dict = None) -> dict:
+    """
+    Interactively collect all contact fields. If `current` is provided, existing
+    values are shown as defaults so the user can press Enter to keep them.
+    """
+    c = current or {}
+    editing = bool(current)
+    verb = "Edit" if editing else "Add"
+
+    print()
+    fmt.header(f"{verb} Contact")
+
+    # Phone — required, validated
+    while True:
+        raw = _prompt("Phone (E.164: +255...)", default=c.get("phone", ""), required=True)
+        import re
+        if re.match(r"^\+\d{7,15}$", raw):
+            phone = raw
+            break
+        print("    ! Must start with + followed by 7-15 digits (e.g. +255712345678)")
+
+    name = _prompt("Name", default=c.get("name", ""), required=True)
+
+    relationship = _prompt_choice(
+        "Relationship",
+        ["close_friend", "family", "work_colleague", "acquaintance", "romantic_partner", "other"],
+        default=c.get("relationship", "acquaintance"),
+    )
+
+    how_we_met = _prompt(
+        "How you met",
+        default=c.get("how_we_met", ""),
+        hint="e.g. university, job, childhood, neighborhood",
+    )
+
+    shared_interests = _prompt(
+        "Shared interests (comma-separated)",
+        default=c.get("shared_interests", ""),
+        hint="e.g. music,coding,travel",
+    )
+
+    communication_style = _prompt(
+        "Communication style",
+        default=c.get("communication_style", ""),
+        hint="e.g. casual_swahili_mix, formal_english, playful",
+    )
+
+    language = _prompt(
+        "Language",
+        default=c.get("language", "en"),
+        hint="en / sw / sw+en / fr / ...",
+        required=True,
+    )
+
+    trust_level = _prompt_choice(
+        "Trust level",
+        ["high", "medium", "low"],
+        default=c.get("trust_level", "medium"),
+    )
+
+    dnd_after = _prompt(
+        "DND after (no replies after this time)",
+        default=c.get("dnd_after", ""),
+        hint="HH:MM or leave blank to disable",
+    )
+
+    dnd_before = _prompt(
+        "DND before (no replies before this time)",
+        default=c.get("dnd_before", ""),
+        hint="HH:MM or leave blank to disable",
+    )
+
+    sim_preference = _prompt_choice(
+        "SIM preference",
+        ["same", "sim1", "sim2", "default"],
+        default=c.get("sim_preference", "default"),
+    )
+
+    model_preference = _prompt_choice(
+        "Model preference",
+        ["auto", "deepseek", "zhipu"],
+        default=c.get("model_preference", "auto"),
+    )
+
+    notes = _prompt(
+        "Notes for the AI",
+        default=c.get("notes", ""),
+        hint="e.g. Short replies. Formal on Mondays.",
+    )
+
+    active = _prompt_choice(
+        "Active (should agent reply?)",
+        ["true", "false"],
+        default=c.get("active", "true"),
+    )
+
+    return {
+        "phone": phone,
+        "name": name,
+        "relationship": relationship,
+        "how_we_met": how_we_met,
+        "shared_interests": shared_interests,
+        "communication_style": communication_style,
+        "language": language,
+        "trust_level": trust_level,
+        "dnd_after": dnd_after,
+        "dnd_before": dnd_before,
+        "sim_preference": sim_preference,
+        "model_preference": model_preference,
+        "notes": notes,
+        "active": active,
+    }
+
+
+def cmd_contacts_add(base_dir: str):
+    import csv
+    contacts_path = os.path.join(base_dir, "contacts.csv")
+
+    # Load existing to check for duplicate phone
+    existing_phones = set()
+    rows = []
+    if os.path.exists(contacts_path):
+        with open(contacts_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                existing_phones.add(row.get("phone", "").strip())
+                rows.append(dict(row))
+
+    new_contact = _collect_contact_fields()
+
+    if new_contact["phone"] in existing_phones:
+        print()
+        fmt.warn(f"{new_contact['phone']} already exists in contacts.csv.")
+        confirm = _prompt("Overwrite?", hint="yes/no", default="no")
+        if confirm.lower() not in ("yes", "y"):
+            fmt.error("Aborted.")
+            return
+        rows = [r for r in rows if r.get("phone", "").strip() != new_contact["phone"]]
+
+    rows.append(new_contact)
+    _write_contacts_csv(contacts_path, rows, CONTACT_FIELDS)
+    print()
+    fmt.success(f"Contact {new_contact['name']} ({new_contact['phone']}) added.")
+
+
+def cmd_contacts_edit(base_dir: str, phone: str):
+    import csv
+    contacts_path = os.path.join(base_dir, "contacts.csv")
+
+    if not os.path.exists(contacts_path):
+        fmt.error("contacts.csv not found.")
+        return
+
+    rows = []
+    current = None
+    with open(contacts_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(dict(row))
+            if row.get("phone", "").strip() == phone:
+                current = dict(row)
+
+    if not current:
+        fmt.error(f"No contact found with phone {phone}")
+        print("  Tip: run `python main.py contacts list` to see all phones.")
+        return
+
+    print(f"\n  Editing {current.get('name', phone)} — press Enter to keep current value.")
+    updated = _collect_contact_fields(current=current)
+
+    rows = [updated if r.get("phone", "").strip() == phone else r for r in rows]
+    _write_contacts_csv(contacts_path, rows, CONTACT_FIELDS)
+    print()
+    fmt.success(f"Contact {updated['name']} ({updated['phone']}) updated.")
+
+
 def cmd_contacts_list(base_dir: str):
     cfg = _load_config(base_dir)
     from agent.contact_resolver import ContactResolver

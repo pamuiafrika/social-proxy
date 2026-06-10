@@ -80,6 +80,9 @@ def main():
     contacts_p = sub.add_parser("contacts", help="Contact management")
     contacts_sub = contacts_p.add_subparsers(dest="contacts_cmd", required=True)
     contacts_sub.add_parser("list", help="List all contacts")
+    contacts_sub.add_parser("add", help="Interactively add a new contact")
+    ce = contacts_sub.add_parser("edit", help="Interactively edit a contact")
+    ce.add_argument("phone", help="E.164 phone number of the contact to edit")
     cd = contacts_sub.add_parser("disable", help="Disable a contact")
     cd.add_argument("phone")
 
@@ -147,6 +150,10 @@ def main():
     elif args.command == "contacts":
         if args.contacts_cmd == "list":
             cmd.cmd_contacts_list(base_dir)
+        elif args.contacts_cmd == "add":
+            cmd.cmd_contacts_add(base_dir)
+        elif args.contacts_cmd == "edit":
+            cmd.cmd_contacts_edit(base_dir, args.phone)
         elif args.contacts_cmd == "disable":
             cmd.cmd_contacts_disable(base_dir, args.phone)
 
